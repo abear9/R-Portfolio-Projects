@@ -1,0 +1,177 @@
+---
+title: "Hebert_M2A"
+output: pdf_document
+date: "2024-09-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# R Data Visualization and Wrangling Analysis
+
+# Titanic Dataset
+
+Question: How did survival among adult passengers vary by sex and passenger class? 
+
+```{r data, include=FALSE, echo=FALSE}
+##this code will not need to be shown, as it is setup
+## install needed packages:
+library(tidyverse)
+library(mosaic)
+library(readxl)
+library(gridExtra)
+
+
+##Load in the xlsx file
+titanic <- read_xlsx('/Users/drewhebert/Documents/Intro to ML/Titanic Survival.xlsx')
+
+```
+
+## Table Summaries
+Here are the numerical tables with survival between sex and class.
+```{r, echo=FALSE}
+##Group by sex, survived or not
+survival_sex = titanic %>%
+  filter(age >= 18.0) %>%
+  group_by(sex, survived) %>%
+  summarize(count = n(), 
+            .groups = "drop")
+
+#Group by class
+survival_class = titanic %>%
+  filter(age >= 18.0) %>%
+  group_by(passengerClass, survived) %>%
+  summarize(count = n(),
+            .groups = "drop")
+
+#Group by both sex and class
+survival_sex_class = titanic %>%
+  filter(age >= 18.0) %>%
+  group_by(sex, passengerClass, survived) %>%
+  summarize(count = n(),
+            .groups = "drop")
+
+#Print out tables
+cat('Survival by Sex: ')
+survival_sex
+cat('Survival by Passenger Class: ')
+survival_class
+```
+
+## Bar Graphs of Distribution
+```{r, echo=FALSE}
+#Plot the Distribution of Survivors by Sex
+plot_sex = ggplot(survival_sex, aes(x=sex, y=count, fill=survived)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Survival by Sex", x = "Sex", y = "Passenger Count", fill = "Survived")
+
+
+#Plot the Dist. of Survivors by passenger class
+plot_class = ggplot(survival_class, aes(x=passengerClass, y=count, fill=survived)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Survival by Class", x = "Passenger Class", y = "Passenger Count", fill = "Survived")
+
+grid.arrange(plot_sex, plot_class, ncol = 2)
+```
+
+It is clear from these charts that a much higher distribution of adult female passengers survived the crash than males. This suggests that women were prioritized in the rescue and survival efforts. 
+
+In regards to Passenger Class, the ratio of surviving passengers to non-surviving passengers is not too different for 1st and 2nd class, but the number of non-surviving passengers greatly increases for passengers in 3rd class. Perhaps passengers in higher classes had better resources, life-saving equipment, or priority on life boats compared to those in lower classes. 
+
+The last table for this dataset to include is survival grouped by sex and class for comparison. 
+```{r, echo=FALSE}
+survival_sex_class
+```
+Female passengers in 1st and 2nd class had a high rate of survival, whereas women in 3rd class did not. Male passengers of all classes did not have a high rate of survival. 
+
+
+# NYC Flights Data Set
+Questions: 
+
+- What times of year have the worst and best average departure delays? Does this vary by airport?
+- Which routes from the NYC area gained the most time in air, on average? 
+- Which carriers have the best "on-time" performance" (defined as the proportion of flights arriving within 10 minutes of their scheduled arrival time)
+
+## Time of Year analysis
+```{r timeofyear, echo=FALSE}
+nycflights <- read_xlsx('/Users/drewhebert/Documents/Intro to ML/NYC Flights.xlsx')
+
+#convert dep delay to numeric
+nycflights$dep_delay <- as.numeric(as.character(nycflights$dep_delay))
+
+#Group by origin and month to find the highest delay parts of the year
+month_delay = nycflights %>%
+  group_by(origin, month) %>%
+  summarize(flight_count = n(),
+            avg_dep_delay = mean(dep_delay, na.rm=TRUE),
+            .groups = "drop")
+
+#Bar plot, facet is origin
+ggplot(month_delay) +
+  geom_col(aes(x=factor(month), y=avg_dep_delay, fill=origin)) + 
+  facet_wrap(~origin) + 
+  labs(title = 'Delay by Month and Origin Airport', x = 'Month', y='Average Departure Delay (min)')
+```
+For all 3 airports in the NYC region, delays seem to be highest in the summer months, with an additional spike in December. These are likely the times with the highest number of flights for travel, visiting family, etc. December delays could also be caused by weather. 
+
+LGA has lower average delays overall, with EWR and JFK having higher average delays throughout the year. The spikes at EWR and JFK are higher in the summer months as well. 
+
+## Routes with Best Gain
+```{r bestgain, echo=FALSE}
+#convert arr_delay to numeric
+nycflights$arr_delay <- as.numeric(as.character(nycflights$arr_delay))
+
+#Creating a gain variable
+nycflights = nycflights %>%
+  mutate(gain = dep_delay - arr_delay)
+
+#Plot a histogram of the gain variable just created
+ggplot(nycflights) +
+  geom_histogram(aes(x=gain), binwidth = 5, na.rm=TRUE)+
+  theme_classic()
+```
+This histogram shows the distribution of gain for flights all across the dataset. Gain is a measure that takes departure delay and subtracts arrival delay. If a flight is 10 minutes late to depart, but arrives only 5 minutes behind the original schedule, the flight made up 5 minutes in the air. Now I will break this out by route to find the "best" ones in terms of gain. 
+
+```{r routegain, echo=FALSE}
+
+#Group by destination
+best_gain = nycflights %>% 
+  group_by(dest) %>%
+  summarize(mean_gain = mean(gain, na.rm=TRUE),
+            .groups = "drop") %>%
+  arrange(desc(mean_gain))
+
+best_gain
+```
+Flights to Montrose, CO show the best gain from NYC airports, with an average of 15.9 on this route.
+
+## On-Time Performance
+```{r ontime, echo=FALSE}
+#Create OT arrival column 
+nycflights = nycflights %>%
+  mutate(ot_arrival = ifelse(arr_delay <= 10, 1, 0))
+
+
+#Group by carrier to get the table of % on time flights
+on_time = nycflights %>%
+  group_by(carrier) %>%
+  summarize(total_flights = n(),
+            ot_flights = sum(ot_arrival, na.rm = TRUE),
+            percent_ot = (ot_flights / total_flights) * 100) %>%
+  arrange(desc(percent_ot))
+
+on_time
+
+```
+
+This table shows the % of flights that are on-time for each carrier in the dataset. The following graph shows the ranked carriers in chart form. 
+
+```{r otchart, echo=FALSE}
+
+#chart using reorder for the correct positions
+ggplot(on_time, aes(x = reorder(carrier, -percent_ot), y=percent_ot, fill=carrier)) + 
+  geom_bar(stat = "identity", position = "dodge")
+```
+HA, or Hawaiian Airlines, had the best on-time performance in the dataset. Nearly 83% of their flights arrived within 10 minutes of their scheduled time. Their volume of flights was on the lower end, but this is still impressive performance. Alaska airlines came in second. 
+
+
