@@ -1,0 +1,147 @@
+---
+title: "Auto MPG Linear Regression"
+output: pdf_document
+date: "2024-09-27"
+---
+```{r setup, echo=FALSE, include=FALSE}
+library(tidyverse)
+library(mosaic)
+library(readxl)
+
+auto_df <- read_xlsx('/Users/drewhebert/Downloads/Auto (1).xlsx')
+
+#horsepower needs to be numeric
+auto_df$horsepower <- as.numeric(auto_df$horsepower)
+auto_df <- na.omit(auto_df)
+```
+# 1 - Produce a scatterplot matrix that includes all of the variables in the dataset
+```{r scatter_matrix}
+plot(auto_df, pch=20, cex=0.25, col='darkorange')
+```
+
+# 2 - Compute the matrix of correlations using cor()
+```{r corr_setup}
+#exclude the name column and omit NAs
+auto_df_corr <- subset(auto_df, select = -name)
+auto_df_corr <- na.omit(auto_df_corr)
+cor(auto_df_corr)
+```
+
+# 3 - Use the lm() function to perform multiple linear regression with mpg as the response and all other variables except name as the predictors.
+```{r mpg_regression}
+#create lm model
+mpg_lm <- lm(mpg ~ cylinders + displacement + horsepower + weight + acceleration + year + 
+            origin, data=auto_df)
+
+#print summary
+summary(mpg_lm)
+
+
+```
+
+## Model Summary
+Overall, there are only a few variables with notable relationships to the response variable. Cylinders, for example, has a negative relationship to the mpg response variable, but the p value indicates that it is not statistically significant. Displacement's relationship is positive and statistically significant, but the coefficient is low. Weight, year, and origin are the other statistically significant variables with low p-values. Year and Origin specifically have higher coefficients, which means these have a stronger influence the response variable. 
+
+The coefficient for the year variable suggests that, as time goes on and increases, so does mpg. This could be due to enhancements in car technology, fuel efficiency, and a focus on getting more out of a gallon of fuel. 
+
+# 4 - Produce diagnostic plots of the linear regression fit. 
+```{r diagnostic}
+#format and plot the diagnostics
+par(mfrow=c(2,2))
+par(mai = c(0.6, 0.6, 0.3, 0.1))
+par(cex = 0.8)
+plot(mpg_lm)
+```
+
+## Diagnostic Summary
+For the residuals vs fitted plot, there is a slight 'U' curve with the dip happening around the middle of the plot. Many of the residuals are not close to 0. This could indicate that the linear model does not capture all of the non-linear relationships in the data. 
+
+The Q-Q residuals chart suggests that, for most of the residuals, there is a standard distribution. The outliers towards the top of the diagonal line could mean there are some large outliers not fully captured in the model.
+
+The Scale-Location plot is very scattered and the line on the chart is curved. There is a larger spread of residuals, and variance is not constant across the model. 
+
+Lastly, the Residuals vs. Leverage plot shows a large cluster of values towards the left of the chart, indicating most points have low leverage and residuals relatively near 0. The one outlier point on the right of the chart shows there is one point that has strong influence on the model results. 
+
+# 5 - Use * and : to fit linear regression models with interaction effects. 
+```{r star_interaction}
+#create the model
+mpg_lm_interaction <- lm(mpg ~ cylinders * displacement * horsepower * weight * acceleration *
+                           year * origin, data = auto_df)
+
+#output is large, so collect coefficients and filter for statistical significance
+mpg_interaction_summary <- summary(mpg_lm_interaction)
+coefficients <- mpg_interaction_summary$coefficients
+significant_terms <- coefficients[coefficients[, 4] < 0.05, ]
+print(significant_terms)
+```
+
+There are no significant interactions from this model. The variables and the response likely don't depend on each other at the same time.  
+
+### Cylinders
+```{r cylinders}
+fit_cylinder_only <- lm(mpg ~ cylinders:displacement + cylinders:horsepower + 
+                            cylinders:weight + cylinders:acceleration + 
+                            cylinders:year + cylinders:origin, data = auto_df)
+summary(fit_cylinder_only)
+```
+
+Taking the interactions between cylinders and other variables, we can see that there are some statistically significant interactions here. Cylinders and origin are the variables that have the highest coefficient, meaning the origin of a vehicle has a larger positive effect on vehicles with more cylinders. 
+
+### Horsepower
+```{r horsepower}
+fit_horsepower_only <- lm(mpg ~ horsepower:displacement +  horsepower:weight + 
+                              horsepower:acceleration + horsepower:year + 
+                              horsepower:origin, data = auto_df)
+summary(fit_horsepower_only)
+```
+
+One interaction that is statistically significant here is horsepower:acceleration. This may suggest that, given the relationship between acceleration and mpg is negative, higher horsepower may lead to less fuel efficiency for higher acceleration cars. 
+
+# 6 - Trying out transformations of variables
+
+Using log(x), sqrt(x), and x^2, I will transform some of the variables in the model:
+```{r transform}
+#Transform some of the variables to build the model
+
+# Log 
+log_lm <- lm(mpg ~ log(cylinders) + log(displacement) + log(horsepower) + log(weight) 
+             + acceleration + year + origin, data = auto_df)
+
+# sqrt
+sqrt_lm <- lm(mpg ~ sqrt(cylinders) + sqrt(displacement) + sqrt(horsepower) + sqrt(weight) 
+              + acceleration + year + origin, data = auto_df)
+
+# x^2
+square_lm <- lm(mpg ~ I(cylinders^2) + I(displacement^2) + I(horsepower^2) + I(weight^2) 
+                + acceleration + year + origin, data = auto_df)
+
+```
+
+```{r log}
+print(summary(log_lm))
+```
+### Log Summary
+Using the log transformation gives some interesting findings. Looking at horsepower and weight in this view shows that, as these two increase, mpg drastically decreases. These are also statistically significant. 
+
+```{r sqrt}
+print(summary(sqrt_lm))
+```
+### Sqrt Summary
+Similar to the log transformation, we can see that weight has a strong impact on mpg. This transformation produced less statistically significant results. 
+
+```{r square}
+print(summary(square_lm))
+```
+### Square Summary
+Almost all of the variables become significant when squaring them, which is an interesting effect. The coefficients are also much smaller here. Interestingly, cylinder has a more clear negative relationship with mpg in this model than some of the others, and is statistically significant. 
+
+Given this information, I will create the log transformation diagnostic plots.
+```{r log_diagnostic }
+#format and plot the diagnostics
+par(mfrow=c(2,2))
+par(mai = c(0.6, 0.6, 0.3, 0.1))
+par(cex = 0.8)
+plot(log_lm)
+```
+
+This does improve the results a little bit, especially looking at the residuals vs. leverage plot. 
