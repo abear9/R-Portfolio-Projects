@@ -1,0 +1,280 @@
+---
+title: "Bootstrapping to Simulate VaR of ETF Portfolios in R"
+output: pdf_document
+date: "2024-11-01"
+---
+
+
+# Construct 3 different possibilities for an ETF-Based Portfolio, each involving an allocation of $100,000 in capital to somewhere between 3 and 10 different funds. 
+
+# Portfolio 1 - Market
+### The first portfolio I will construct is a broad portfolio of ETFs. I have selected VOO for S&P 500 exposure, VXUS for some exposure outside of the US, and AVUV for small cap value exposure. These are all ETFs that I have considered or owned personally, so this is a realistic portfolio. I will also explain the steps and show the code more for this first portfolio and use the same assumptions going forward. The weights are 70% VOO, 20% VXUS, and 10% AVUV.
+
+```{r libraries, include=FALSE}
+library(mosaic)
+library(quantmod)
+library(dplyr)
+library(foreach)
+library(ggplot2)
+```
+
+```{r portfolio_1}
+#import fund information from quantmod
+etfs_1 <- c("VOO", "VXUS", "AVUV")
+getSymbols(etfs_1)
+
+```
+
+```{r close_to_close}
+#adjust for splits and dividends
+VOOa <- adjustOHLC(VOO)
+VXUSa <- adjustOHLC(VXUS)
+AVUVa <- adjustOHLC(AVUV)
+
+#plot close to close information of AVUV
+plot(ClCl(AVUVa))
+```
+
+
+Here, I will combine all of the return for the past 5 years into a matrix for each of my funds:
+```{r returns_matrix}
+#collect returns
+voo_return <- ClCl(VOOa) 
+vxus_return <- ClCl(VXUSa)
+avuv_return <- ClCl(AVUVa)
+
+#merge all returns together, clean and filter the data
+returns_1 <- voo_return %>%
+  merge(vxus_return, join='inner') %>%
+  merge(avuv_return, join='inner') %>%
+  na.omit() %>%
+  last("5 years") %>%
+  as.matrix()
+
+#check changes
+head(returns_1)
+```
+
+
+
+With this matrix I can now simulate returns for a random period and calculate VaR. 
+
+```{r bootstrap_1}
+#set number of bootstraps, trading days
+set.seed(9)
+n_bootstrap <- 10000
+n_days <- 20
+
+#set up weights and capital
+capital <- 100000
+weights_1 <- c(0.7, 0.2, 0.1)
+
+#weight the returns by the selected distribution
+weighted_returns_1 <- returns_1 %*% weights_1
+
+#set up a list for returns and run through the simulation
+portfolio_returns_1 <- numeric(n_bootstrap)
+for (n in 1:n_bootstrap) {
+  sampled_daily_returns <- sample(weighted_returns_1, 
+                                  n_days, replace = TRUE) #replace to rebalance
+  portfolio_returns_1[n] <- sum(sampled_daily_returns) #sum for additive returns
+}
+```
+
+Using these simulated returns, I can calculate VaR for this portfolio and comment on the findings. 
+
+```{r var_1}
+#caclulating at 95% confidence
+var_1 <- abs(quantile(portfolio_returns_1 * capital, 0.05))
+print(paste('5% VaR of Portfolio 1: ', var_1))
+```
+
+This simulation produces a VaR of about $8,750, representing 8.75% of the total portfolio value. There is a 5% chance that losses could be at this level or higher over the 20-trading day time horizon with this portfolio. Given the good performance over the past 5 years (with the exception of COVID-19), these ETFs represent a good opportunity for strong returns. This VaR is relatively small for the size of the portfolio. For a long term growth strategy, this portfolio is simple and effective. 
+\newpage
+
+# Portfolio 2 - Tech
+### This portfolio will be a bit more aggressive and specialized, focusing on tech and semiconductors. The holdings will be: XLK, SMH (semiconductors), IXN (global tech), and VGT. Recent performance - as of 10/31/2024 - is very strong for this sector, specifically driven by the AI boom and semiconductor producers like NVDA showing strong growth. The weights are 30% XLK, 20% SMH, 20% IXN, and 30% VGT. 
+
+
+```{r portfolio_2, include=FALSE}
+#import fund information from quantmod
+etfs_2 <- c("XLK", "SMH", "IXN", "VGT")
+getSymbols(etfs_2)
+```
+
+```{r close_to_close_2}
+#adjust for splits and dividends
+XLKa <- adjustOHLC(XLK)
+SMHa <- adjustOHLC(SMH)
+IXNa <- adjustOHLC(IXN)
+VGTa <- adjustOHLC(VGT)
+
+#plot close to close information of VGT to test
+plot(ClCl(VGTa))
+```
+
+Here are the first returns for this portfolio:
+```{r returns_matrix_2, echo=FALSE}
+#collect returns
+xlk_return <- ClCl(XLKa) 
+smh_return <- ClCl(SMHa)
+ixn_return <- ClCl(IXNa)
+vgt_return <- ClCl(VGTa)
+
+#merge all returns together, clean and filter the data
+returns_2 <- xlk_return %>%
+  merge(smh_return, join='inner') %>%
+  merge(ixn_return, join='inner') %>%
+  merge(vgt_return, join='inner') %>%
+  na.omit() %>%
+  last("5 years") %>%
+  as.matrix()
+
+#check changes
+head(returns_2)
+```
+
+Now, run the bootstrap resampling for this portfolio:
+```{r bootstrap_2}
+#set number of bootstraps, trading days
+set.seed(10)
+n_bootstrap <- 10000
+n_days <- 20
+
+#set up weights and capital
+capital <- 100000
+weights_2 <- c(0.3, 0.2, 0.2, 0.3)
+
+#weight the returns by the selected distribution
+weighted_returns_2 <- returns_2 %*% weights_2
+
+#set up a list for returns and run through the simulation
+portfolio_returns_2 <- numeric(n_bootstrap)
+for (n in 1:n_bootstrap) {
+  sampled_daily_returns <- sample(weighted_returns_2, 
+                                  n_days, replace = TRUE) #replace to rebalance
+  portfolio_returns_2[n] <- sum(sampled_daily_returns) #sum for additive returns
+}
+```
+
+Here is the VaR for Portfolio 2:
+```{r var_2}
+var_2 <- abs(quantile(portfolio_returns_2 * capital, 0.05))
+print(paste('5% VaR of Portfolio 2: ', var_2))
+```
+
+Portfolio 2's VaR is fairly higher at $11,506, which makes sense due to the higher risk profile of focusing on one sector. While recent returns have been solid, the tech sector is more volatile to ups and downs historically. To confirm this, here are the summary stats for the sampled returns: 
+
+```{r}
+summary(portfolio_returns_2)
+```
+
+The min value is nearly -33%, and the max is over 126%. This wide range of returns shows a good foundation for the higher VaR of this portfolio. Overall, this is a riskier portfolio, but still likely to lead to strong returns in shorter time frames. 
+\newpage
+
+# Portfolio 3 - Alternative Energy
+### One industry that is quite interesting and presents a lot of future opportunities is Energy. With many companies and countries transitioning away from fossil fuels, alternative energy sources will become more important. Recently, multiple big tech corporations have announced deals or intentions to scale their AI-power needs using nuclear energy as well. This portfolio would be useful for someone bullish on multiple alternative energy sources in the near and long-term future. The holdings are XLE (broad energy sector), URA (uranium), TAN (solar), FAN (wind). The weights are 40% XLE, 20% URA, 20% TAN, and 20% FAN.
+
+```{r portfolio_3, include=FALSE}
+#import fund information from quantmod
+etfs_3 <- c("XLE", "URA", "TAN", "FAN")
+getSymbols(etfs_3)
+```
+
+```{r close_to_close_3}
+#adjust for splits and dividends
+XLEa <- adjustOHLC(XLE)
+URAa <- adjustOHLC(URA)
+TANa <- adjustOHLC(TAN)
+FANa <- adjustOHLC(FAN)
+
+#plot close to close information of URA to test
+plot(ClCl(URAa))
+```
+
+Here are the first returns for this portfolio:
+```{r returns_matrix_3, echo=FALSE}
+#collect returns
+xle_return <- ClCl(XLEa) 
+ura_return <- ClCl(URAa)
+tan_return <- ClCl(TANa)
+fan_return <- ClCl(FANa)
+
+#merge all returns together, clean and filter the data
+returns_3 <- xle_return %>%
+  merge(ura_return, join='inner') %>%
+  merge(tan_return, join='inner') %>%
+  merge(fan_return, join='inner') %>%
+  na.omit() %>%
+  last("5 years") %>%
+  as.matrix()
+
+#check changes
+head(returns_3)
+```
+
+Here is the final bootstrap resampling for the 3rd portfolio:
+```{r bootstrap_3}
+#set number of bootstraps, trading days
+set.seed(11)
+n_bootstrap <- 10000
+n_days <- 20
+
+#set up weights and capital
+capital <- 100000
+weights_3 <- c(0.4, 0.2, 0.2, 0.2) #equal exposure in each alternative
+
+#weight the returns by the selected distribution
+weighted_returns_3 <- returns_3 %*% weights_3
+
+#set up a list for returns and run through the simulation
+portfolio_returns_3 <- numeric(n_bootstrap)
+for (n in 1:n_bootstrap) {
+  sampled_daily_returns <- sample(weighted_returns_3, 
+                                  n_days, replace = TRUE) #replace to rebalance
+  portfolio_returns_3[n] <- sum(sampled_daily_returns) #sum for additive returns
+}
+```
+
+Finally, the VaR for this portfolio:
+```{r var_3}
+var_3 <- abs(quantile(portfolio_returns_3 * capital, 0.05))
+print(paste('5% VaR of Portfolio 3: ', var_3))
+```
+
+Unsurprisingly, this portfolio yields the largest VaR out of the 3 at $12,561. While there may be a large need and future for these alternative energies, historical performance has not been as strong for these ETFs. It is likely that exposure to the overall energy industry through XLE reduces some of the risk in this portfolio, especially given the shaky returns from FAN and TAN, the latter of which is down 85% from inception to today. It is fun to theorize and look long term at this kind of portfolio, but the risk and uncertainty has ultimately not been compensated with high reward. 
+
+# Summary
+
+### The portfolios calculated each represent different investing theses, risk tolerances, and behavior. With the various VaRs in mind, here is a chart of returns for each portfolio:
+```{r plots_1, echo=FALSE}
+#combine returns into df
+returns_df <- data.frame(
+  Portfolio = rep(c("Portfolio 1 - Market", "Portfolio 2 - Tech", "Portfolio 3 - Alt. Energy"), each = length(portfolio_returns_1)),
+  Returns = c(portfolio_returns_1, portfolio_returns_2, portfolio_returns_3)
+)
+
+#box plot
+ggplot(returns_df, aes(x = Portfolio, y = Returns, fill = Portfolio)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Portfolio Returns", y = "Returns", x = "Portfolio") +
+  theme_minimal()
+```
+
+### This box plot shows that, while the average returns are somewhat similar for each portfolio, the Tech ETF portfolio has a few more outliers on the positive return side. This is likely due to recent booms in tech stock prices, especially for big tech and semiconductors, which are heavily weighted in some of these ETFs. Also, the broader Market ETF shows relatively little fluctuation between the highs and lows. 
+
+```{r mean_var, echo=FALSE}
+#returns list
+returns_list <- list(portfolio_returns_1, portfolio_returns_2, portfolio_returns_3)
+counter <- 1
+
+for (list in returns_list) {
+  print(paste("Portfolio ", counter, " Summary:"))
+  print(summary(list))
+  counter <- counter + 1
+}
+```
+### Lastly, these summaries show some important information about the returns of each portfolio. The max of the Tech Portfolio is the highest, and the minimum is within 5 percentage points of the safer Market Portfolio. The Alt. Energy Portfolio has less of a range of values, but with the VaR calculated earlier, you'd want to see higher average returns.
+
+### Overall, as a younger person with a higher risk tolerance, a bullish outlook on the long-term viability of technology, and the growth of AI in all parts of life, I would be willing to take more exposure to risk, i.e. the Tech Portfolio. The potential upsides in returns, in my opinion, outweigh the increased VaR shown from the bootstrap resampling. The next step would be to test hypotheses on individual ETF weights, and perhaps consider adding additional exposure to other areas of tech. 
+
